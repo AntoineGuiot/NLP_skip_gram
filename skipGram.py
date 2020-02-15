@@ -37,6 +37,7 @@ class SkipGram:
         self.winSize = winSize
         self.vocab = 0  # list of valid words
         self.negativeRate = negativeRate
+        self.nEmbed = nEmbed
 
     def sample(self, omit):
         omit_id = []
@@ -48,6 +49,9 @@ class SkipGram:
         return negativeIds
 
     def train(self):
+        U = np.random((len(self.w2id), self.nEmbed))
+        V = np.random((len(w2id), self.nEmbed))
+
         for counter, sentence in enumerate(self.trainset):
             sentence = filter(lambda word: word in self.vocab, sentence)
 
@@ -61,7 +65,7 @@ class SkipGram:
                     ctxtId = self.w2id[context_word]
                     if ctxtId == wIdx: continue
                     negativeIds = self.sample([wIdx, ctxtId])
-                    self.trainWord(wIdx, ctxtId, negativeIds)
+                    self.trainWord(wIdx, ctxtId, negativeIds, U, V)
                     self.trainWords += 1
 
             if counter % 1000 == 0:
@@ -71,13 +75,22 @@ class SkipGram:
                 self.trainWords = 0
                 self.accLoss = 0.
 
-    def trainWord(self, wordId, contextId, negativeIds):
+    def trainWord(self, wordId, contextId, negativeIds, U, V):
         raise NotImplementedError('here is all the fun!')
-        
+
         def save(self, path):
             raise NotImplementedError('implement it!')
 
-        def similarity(self, word1, word2):
+        def similarity(self, word1, word2, U, V):
+            # TODO add case when word is not in w2Id !!
+            id_word_1 = self.w2id[word1]
+            id_word_2 = self.w2id[word2]
+            U1 = U[:, id_word_1]
+            V2 = V[:, id_word_2]
+            scalair = U1.dot(V2)
+            similarity = 1 / (1 + np.exp(-scalair))
+            return similarity
+
             """
                 computes similiarity between the two words. unknown words are mapped to one common vector
             :param word1:
