@@ -94,8 +94,34 @@ class SkipGram:
                 self.accLoss = 0.
 
     def trainWord(self, wordId, contextId, negativeIds):
-        raise NotImplementedError('here is all the fun!')
 
+        # we want to maximize the log likelihood l = sum[sigma(gamma(i,j)*u_i*v_j)]
+        eta = 0.025  # learning rate
+
+        # compute gradients of l
+        U1 = U[:, wordId]
+        V2 = V[:, contextID]
+        scalar = U1.dot(V2)
+        gradl_word = 1 / (1 + np.exp(-scalar)) * V2
+        gradl_context = 1 / (1 + np.exp(-scalar)) * U1
+
+        # update representations
+        U1 += eta * gradl_word
+        V2 += eta * gradl_context
+
+        for negativeId in negativeIds:
+            # compute gradients of l
+            U1 = U[:, wordId]
+            V2 = V[:, negativeId]
+            scalar = U1.dot(V2)
+            gradl_word = -1 / (1 + np.exp(scalar)) * V2
+            gradl_context = -1 / (1 + np.exp(scalar)) * U1
+
+            # update representations
+            U1 += eta * gradl_word
+            V2 += eta * gradl_context
+
+        raise NotImplementedError('here is all the fun!')
 
 	def save(self,path):
 		raise NotImplementedError('implement it!')
