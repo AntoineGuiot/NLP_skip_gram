@@ -142,10 +142,11 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
+
         id_word_1 = self.w2id[word1]
         id_word_2 = self.w2id[word2]
-        U1 = U[:, id_word_1]
-        V2 = V[:, id_word_2]
+        U1 = self.U[:, id_word_1]
+        V2 = self.V[:, id_word_2]
         scalair = U1.dot(V2)
         similarity = 1 / (1 + np.exp(-scalair))
         return similarity
