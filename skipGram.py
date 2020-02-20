@@ -45,19 +45,26 @@ class SkipGram:
         self.winSize = winSize
         self.w2id = {}
         self.occ = {}  # dictionnary containing the nb of occurrence of each word
-        for sentence in sentences:
-            for word in sentence:
-                if word in self.occ.keys():
-                    self.occ[word] += 1
-                else:
-                    self.occ[word] = 1
-        self.vocab = [w for w in self.occ.keys() if self.occ[w] > self.minCount]  # list of valid words
         idx = 0
+
+        sentences_concat = np.concatenate(sentences)
+        unique, frequency = np.unique(sentences_concat, return_counts=True)
+        self.occ = dict(zip(unique, frequency))
+        '''
         for sentence in sentences:
             for word in sentence:
                 if word not in self.w2id.keys() and word in self.vocab:
                     self.w2id[word] = idx
                     idx += 1
+                if word in self.occ.keys():
+                    self.occ[word] += 1
+                else:
+                    self.occ[word] = 1
+         self.vocab = [w for w in self.occ.keys() if self.occ[w] > self.minCount]  # list of valid words
+        '''
+        self.vocab = {k: v for k, v in self.occ.items() if v > 5}
+        self.w2id = dict(zip(self.vocab.keys(), np.arange(0, len(self.vocab))))
+
         self.trainset = sentences  # set of sentences
         self.negativeRate = negativeRate
         self.nEmbed = nEmbed
@@ -90,7 +97,9 @@ class SkipGram:
         return negativeIds
 
     def train(self, nb_epochs):
+        eta = 0.25
         for epoch in range(nb_epochs):
+            eta = 0.9 * eta
             for counter, sentence in enumerate(self.trainset):
                 sentence = list(filter(lambda word: word in self.vocab, sentence))
 
@@ -103,7 +112,7 @@ class SkipGram:
                         ctxtId = self.w2id[context_word]
                         if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
-                        self.trainWord(wIdx, ctxtId, negativeIds)
+                        self.trainWord(wIdx, ctxtId, negativeIds, eta)
                         self.trainWords += 1
 
                 if counter % 1000 == 0:
@@ -112,9 +121,8 @@ class SkipGram:
                     self.trainWords = 0
                     self.accLoss = 0.
 
-    def trainWord(self, wordId, contextId, negativeIds):
+    def trainWord(self, wordId, contextId, negativeIds, eta):
         # we want to maximize the log likelihood l = sum[sigma(gamma(i,j)*u_i*v_j)]
-        eta = 0.025  # learning rate
         U = self.U
         V = self.V
 
@@ -164,7 +172,7 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        common_vect = np.ones(self.nEmbed)
+        common_vect = np.zeros(self.nEmbed)
         if word1 not in self.vocab and word2 in self.vocab:
             id_word_2 = self.w2id[word2]
             w1 = common_vect
@@ -210,7 +218,7 @@ if __name__ == '__main__':
     if not opts.test:
         sentences = text2sentences(opts.text)
         sg = SkipGram(sentences)
-        sg.train(2)
+        sg.train(1)
         sg.save(opts.model)
 
     else:
