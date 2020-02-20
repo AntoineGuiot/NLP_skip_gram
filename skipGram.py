@@ -45,7 +45,6 @@ class SkipGram:
         self.winSize = winSize
         self.w2id = {}
         self.occ = {}  # dictionnary containing the nb of occurrence of each word
-        idx = 0
 
         sentences_concat = np.concatenate(sentences)
         unique, frequency = np.unique(sentences_concat, return_counts=True)
@@ -62,7 +61,7 @@ class SkipGram:
                     self.occ[word] = 1
          self.vocab = [w for w in self.occ.keys() if self.occ[w] > self.minCount]  # list of valid words
         '''
-        self.vocab = {k: v for k, v in self.occ.items() if v > 5}
+        self.vocab = {k: v for k, v in self.occ.items() if v > self.minCount}
         self.w2id = dict(zip(self.vocab.keys(), np.arange(0, len(self.vocab))))
 
         self.trainset = sentences  # set of sentences
