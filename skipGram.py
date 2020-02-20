@@ -40,35 +40,29 @@ def loadPairs(path):
 
 
 class SkipGram:
-    def __init__(self, sentences, nEmbed=100, negativeRate=5, winSize=5, minCount=5):
+    def __init__(self, sentences, nEmbed=10, negativeRate=5, winSize=5, minCount=5):
         self.minCount = minCount
         self.winSize = winSize
-        self.w2id = {}
-        self.occ = {}  # dictionnary containing the nb of occurrence of each word
+
+        # dictionnary containing the nb of occurrence of each word
 
         sentences_concat = np.concatenate(sentences)
         unique, frequency = np.unique(sentences_concat, return_counts=True)
         self.occ = dict(zip(unique, frequency))
-        '''
-        for sentence in sentences:
-            for word in sentence:
-                if word not in self.w2id.keys() and word in self.vocab:
-                    self.w2id[word] = idx
-                    idx += 1
-                if word in self.occ.keys():
-                    self.occ[word] += 1
-                else:
-                    self.occ[word] = 1
-         self.vocab = [w for w in self.occ.keys() if self.occ[w] > self.minCount]  # list of valid words
-        '''
         self.vocab = {k: v for k, v in self.occ.items() if v > self.minCount}
         self.w2id = dict(zip(self.vocab.keys(), np.arange(0, len(self.vocab))))
 
         self.trainset = sentences  # set of sentences
         self.negativeRate = negativeRate
         self.nEmbed = nEmbed
-        self.U = np.random.random((self.nEmbed, len(self.w2id)))
-        self.V = np.random.random((self.nEmbed, len(self.w2id)))
+
+        id = self.w2id.values()
+        vect = np.random.random((self.nEmbed, len(self.w2id)))
+
+        self.U = dict(zip(id, vect.T))
+        self.V = dict(zip(id, vect.T))
+        # self.U = np.random.random((self.nEmbed, len(self.w2id)))
+        # self.V = np.random.random((self.nEmbed, len(self.w2id)))
         self.loss = []
         self.trainWords = 0
         self.accLoss = 0.
@@ -122,12 +116,12 @@ class SkipGram:
 
     def trainWord(self, wordId, contextId, negativeIds, eta):
         # we want to maximize the log likelihood l = sum[sigma(gamma(i,j)*u_i*v_j)]
-        U = self.U
-        V = self.V
+        # U = self.U
+        # V = self.V
 
         # compute gradients of l
-        U1 = U[:, wordId]
-        V2 = V[:, contextId]
+        U1 = self.U[wordId]
+        V2 = self.V[contextId]
         scalar = U1.dot(V2)
         gradl_word = 1 / (1 + np.exp(scalar)) * V2
         gradl_context = 1 / (1 + np.exp(scalar)) * U1  # modifié le signe
@@ -137,13 +131,13 @@ class SkipGram:
         V2 += eta * gradl_context
 
         # update U and V
-        U[:, wordId] = U1
-        V[:, contextId] = V2
+        self.U[wordId] = U1
+        self.V[contextId] = V2
 
         for negativeId in negativeIds:
             # compute gradients of l
-            U1 = U[:, wordId]
-            V2 = V[:, negativeId]
+            U1 = self.U[wordId]
+            V2 = self.V[negativeId]
             scalar = U1.dot(V2)
             gradl_word = -1 / (1 + np.exp(-scalar)) * V2
             gradl_context = -1 / (1 + np.exp(-scalar)) * U1
@@ -153,12 +147,10 @@ class SkipGram:
             V2 += eta * gradl_context
 
             # update U and V
-            U[:, wordId] = U1
-            V[:, negativeId] = V2
+            self.U[wordId] = U1
+            self.V[negativeId] = V2
 
         # update self.U and self.V
-        self.U = U
-        self.V = V
 
     def save(self, path):
         with open(path, 'wb') as f:
@@ -175,10 +167,10 @@ class SkipGram:
         if word1 not in self.vocab and word2 in self.vocab:
             id_word_2 = self.w2id[word2]
             w1 = common_vect
-            w2 = self.U[:, id_word_2]
+            w2 = self.U[id_word_2]
         elif word1 in self.vocab and word2 not in self.vocab:
             id_word_1 = self.w2id[word1]
-            w1 = self.U[:, id_word_1]
+            w1 = self.U[id_word_1]
             w2 = common_vect
         elif word1 not in self.vocab and word2 not in self.vocab:
             w1 = common_vect
@@ -186,8 +178,8 @@ class SkipGram:
         else:
             id_word_1 = self.w2id[word1]
             id_word_2 = self.w2id[word2]
-            w1 = self.U[:, id_word_1]
-            w2 = self.U[:, id_word_2]
+            w1 = self.U[id_word_1]
+            w2 = self.U[id_word_2]
 
         scalair = w1.dot(w2)
         similarity = 1 / (1 + np.exp(-scalair))
