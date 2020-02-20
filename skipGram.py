@@ -7,18 +7,16 @@ import numpy as np
 from scipy.special import expit
 from sklearn.preprocessing import normalize
 
-__authors__ = ['Anoine Guiot', 'Arthur Claude', 'Armand Margerin']
-__emails__ = ['armand.margerin@gmail.com', 'antoine.guiot@supelec.fr', 'athur.claude@supelec.fr']
+__authors__ = ['Antoine Guiot', 'Arthur Claude', 'Armand Margerin']
+__emails__ = ['antoine.guiot@supelec.fr', 'arthur.claude@supelec.fr', 'armand.margerin@gmail.com']
 
-import spacy
+import pickle
 from spacy.lang.en import English
-from spacy.lang.en.stop_words import STOP_WORDS
-import random
-
-spacy_stopwords = spacy.lang.en.stop_words.STOP_WORDS
 
 nlp = English()
 
+
+# pour ajouter un mot en stop word nlp.vocab[word].is_stop = True
 
 def text2sentences(path):
     # feel free to make a better tokenization/pre-processing
@@ -27,13 +25,12 @@ def text2sentences(path):
         for l in f:
             sentences.append(l.lower().split())
     # removing stopwords and punctuation
-    sentences_pre = []
     for sentence in sentences:
         for word in sentence:
             lexeme = nlp.vocab[word]
-            if lexeme.is_stop == False:
-                sentences_pre.append(word)
-    return sentences_pre
+            if lexeme.is_stop == True:
+                sentence.remove(word)
+    return sentences
 
 
 def loadPairs(path):
@@ -44,60 +41,76 @@ def loadPairs(path):
 
 class SkipGram:
     def __init__(self, sentences, nEmbed=100, negativeRate=5, winSize=5, minCount=5):
-        nbsentences = len(sentences)
+        self.minCount = minCount
+        self.winSize = winSize
         self.w2id = {}
-        idx = 1
+        self.occ = {}  # dictionnary containing the nb of occurrence of each word
         for sentence in sentences:
             for word in sentence:
-                if word not in self.w2id.keys():
+                if word in self.occ.keys():
+                    self.occ[word] += 1
+                else:
+                    self.occ[word] = 1
+        self.vocab = [w for w in self.occ.keys() if self.occ[w] > self.minCount]  # list of valid words
+        idx = 0
+        for sentence in sentences:
+            for word in sentence:
+                if word not in self.w2id.keys() and word in self.vocab:
                     self.w2id[word] = idx
                     idx += 1
-
         self.trainset = sentences  # set of sentences
-        self.winSize = winSize
-        self.vocab = 0  # list of valid words
         self.negativeRate = negativeRate
         self.nEmbed = nEmbed
-        self.U = np.random.rand((len(self.w2id), self.nEmbed))
-        self.V = np.random.rand((len(self.w2id), self.nEmbed))
+        self.U = np.random.random((self.nEmbed, len(self.w2id)))
+        self.V = np.random.random((self.nEmbed, len(self.w2id)))
+        self.loss = []
+        self.trainWords = 0
+        self.accLoss = 0.
+        self.q = {}
+        s = 0
+        for w in self.w2id.keys():
+            f = self.occ[w] ** (3 / 4)
+            s += f
+            self.q[self.w2id[w]] = f
+        self.q = {k: v / s for k, v in self.q.items()}  # dictionary with keys = ids and values = prob q
 
     def sample(self, omit):
         """samples negative words, ommitting those in set omit"""
-        omit_id = []
-        for word in omit:
-            omit_id.append(self.w2id[word])
         w2id_list = list(self.w2id.values())
-        [w2id_list.remove(omit_word_id) for omit_word_id in omit_id]
-        negativeIds = random.choices(w2id_list, len(w2id_list) / self.negativeRate)
+        # [w2id_list.remove(omit_word_id) for omit_word_id in omit]
+        # q_list = []
+        # for i in w2id_list:
+        #	q_list.append(self.q[i])
+        q_list = list(self.q.values())
+        negativeIds = np.random.choice(w2id_list, size=self.negativeRate, p=q_list)
+        for i in range(len(negativeIds)):
+            if negativeIds[i] in omit:
+                while negativeIds[i] in omit:
+                    negativeIds[i] = np.random.choice(w2id_list, p=q_list)
         return negativeIds
 
-    def train(self):
-        self.U = np.random((len(self.w2id), self.nEmbed))
-        self.V = np.random((len(self.w2id), self.nEmbed))
+    def train(self, nb_epochs):
+        for epoch in range(nb_epochs):
+            for counter, sentence in enumerate(self.trainset):
+                sentence = list(filter(lambda word: word in self.vocab, sentence))
 
-        for counter, sentence in enumerate(self.trainset):
+                for wpos, word in enumerate(sentence):
+                    wIdx = self.w2id[word]
+                    winsize = np.random.randint(self.winSize) + 1
+                    start = max(0, wpos - winsize)
+                    end = min(wpos + winsize + 1, len(sentence))
+                    for context_word in sentence[start:end]:
+                        ctxtId = self.w2id[context_word]
+                        if ctxtId == wIdx: continue
+                        negativeIds = self.sample({wIdx, ctxtId})
+                        self.trainWord(wIdx, ctxtId, negativeIds)
+                        self.trainWords += 1
 
-        sentence = filter(lambda word: word in self.vocab, sentence)
-
-        for wpos, word in enumerate(sentence):
-            wIdx = self.w2id[word]
-            winsize = np.random.randint(self.winSize) + 1
-            start = max(0, wpos - winsize)
-            end = min(wpos + winsize + 1, len(sentence))
-
-            for context_word in sentence[start:end]:
-                ctxtId = self.w2id[context_word]
-                if ctxtId == wIdx: continue
-                negativeIds = self.sample({wIdx, ctxtId})
-                self.trainWord(wIdx, ctxtId, negativeIds)
-                self.trainWords += 1
-
-        if counter % 1000 == 0:
-            print
-            ' > training %d of %d' % (counter, len(self.trainset))
-            self.loss.append(self.accLoss / self.trainWords)
-            self.trainWords = 0
-            self.accLoss = 0.
+                if counter % 1000 == 0:
+                    print(' > training %d of %d' % (counter, len(self.trainset)))
+                    self.loss.append(self.accLoss / self.trainWords)
+                    self.trainWords = 0
+                    self.accLoss = 0.
 
     def trainWord(self, wordId, contextId, negativeIds):
         # we want to maximize the log likelihood l = sum[sigma(gamma(i,j)*u_i*v_j)]
@@ -109,31 +122,40 @@ class SkipGram:
         U1 = U[:, wordId]
         V2 = V[:, contextId]
         scalar = U1.dot(V2)
-        gradl_word = 1 / (1 + np.exp(-scalar)) * V2
-        gradl_context = 1 / (1 + np.exp(-scalar)) * U1
+        gradl_word = 1 / (1 + np.exp(scalar)) * V2
+        gradl_context = 1 / (1 + np.exp(scalar)) * U1  # modifié le signe
 
         # update representations
         U1 += eta * gradl_word
         V2 += eta * gradl_context
+
+        # update U and V
+        U[:, wordId] = U1
+        V[:, contextId] = V2
 
         for negativeId in negativeIds:
             # compute gradients of l
             U1 = U[:, wordId]
             V2 = V[:, negativeId]
             scalar = U1.dot(V2)
-            gradl_word = -1 / (1 + np.exp(scalar)) * V2
-            gradl_context = -1 / (1 + np.exp(scalar)) * U1
+            gradl_word = -1 / (1 + np.exp(-scalar)) * V2
+            gradl_context = -1 / (1 + np.exp(-scalar)) * U1
 
             # update representations
             U1 += eta * gradl_word
             V2 += eta * gradl_context
+
+            # update U and V
+            U[:, wordId] = U1
+            V[:, negativeId] = V2
 
         # update self.U and self.V
         self.U = U
         self.V = V
 
     def save(self, path):
-        raise NotImplementedError('implement it!')
+        with open(path, 'wb') as f:
+            pickle.dump([self.U, self.w2id, self.vocab], f)
 
     def similarity(self, word1, word2):
         """
@@ -142,18 +164,38 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
+        common_vect = np.ones(self.nEmbed)
+        if word1 not in self.vocab and word2 in self.vocab:
+            id_word_2 = self.w2id[word2]
+            w1 = common_vect
+            w2 = self.U[:, id_word_2]
+        elif word1 in self.vocab and word2 not in self.vocab:
+            id_word_1 = self.w2id[word1]
+            w1 = self.U[:, id_word_1]
+            w2 = common_vect
+        elif word1 not in self.vocab and word2 not in self.vocab:
+            w1 = common_vect
+            w2 = common_vect
+        else:
+            id_word_1 = self.w2id[word1]
+            id_word_2 = self.w2id[word2]
+            w1 = self.U[:, id_word_1]
+            w2 = self.U[:, id_word_2]
 
-        id_word_1 = self.w2id[word1]
-        id_word_2 = self.w2id[word2]
-        U1 = self.U[:, id_word_1]
-        V2 = self.V[:, id_word_2]
-        scalair = U1.dot(V2)
+        scalair = w1.dot(w2)
         similarity = 1 / (1 + np.exp(-scalair))
+        # similarity = scalair / (np.linalg.norm(w1) * np.linalg.norm(w2))
         return similarity
 
     @staticmethod
     def load(path):
-        raise NotImplementedError('implement it!')
+        with open(path, 'rb') as f:
+            U_l, w2id_l, vocab_l = pickle.load(f)
+            sg = SkipGram([])
+            sg.U = U_l
+            sg.w2id = w2id_l
+            sg.vocab = vocab_l
+        return sg
 
 
 if __name__ == '__main__':
@@ -168,7 +210,7 @@ if __name__ == '__main__':
     if not opts.test:
         sentences = text2sentences(opts.text)
         sg = SkipGram(sentences)
-        sg.train(...)
+        sg.train(2)
         sg.save(opts.model)
 
     else:
