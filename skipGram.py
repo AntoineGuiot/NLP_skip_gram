@@ -1,7 +1,7 @@
 from __future__ import division
 import argparse
 import pandas as pd
-
+import re  # regular expression
 # useful stuff
 import numpy as np
 from scipy.special import expit
@@ -23,11 +23,16 @@ def text2sentences(path):
     sentences = []
     with open(path) as f:
         for l in f:
-            sentences.append(l.lower().split())
+            # l = re.sub('[^a-zA-Z]', '', l)
+            # regex = re.compile('[^a-zA-Z]')
+            # First parameter is the replacement, second parameter is your input string
+            sentences.append(re.sub('[^a-zA-Z]', ' ', l).lower().split())
     # removing stopwords and punctuation
     for sentence in sentences:
+
         for word in sentence:
             lexeme = nlp.vocab[word]
+
             if lexeme.is_stop == True:
                 sentence.remove(word)
     return sentences
@@ -107,8 +112,8 @@ class SkipGram:
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds, eta)
                         self.trainWords += 1
-
-                if counter % 1000 == 0:
+                        self.accLoss += self.similarity(wIdx, ctxtId)
+                if counter % 100 == 0:
                     print(' > training %d of %d' % (counter, len(self.trainset)))
                     self.loss.append(self.accLoss / self.trainWords)
                     self.trainWords = 0
@@ -163,7 +168,7 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        common_vect = np.zeros(self.nEmbed)
+        common_vect = +np.ones(self.nEmbed) * 10000
         if word1 not in self.vocab and word2 in self.vocab:
             id_word_2 = self.w2id[word2]
             w1 = common_vect
