@@ -45,7 +45,7 @@ def loadPairs(path):
 
 
 class SkipGram:
-    def __init__(self, sentences, nEmbed=10, negativeRate=5, winSize=5, minCount=5):
+    def __init__(self, sentences, nEmbed=10, git=5, winSize=5, minCount=5):
         self.minCount = minCount
         self.winSize = winSize
 
@@ -112,9 +112,9 @@ class SkipGram:
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds, eta)
                         self.trainWords += 1
-                        self.accLoss += self.similarity(wIdx, ctxtId)
+                        self.accLoss += self.compute_loss(wIdx, ctxtId)
                 if counter % 100 == 0:
-                    print(' > training %d of %d' % (counter, len(self.trainset)))
+                    #print(' > training %d of %d' % (counter, len(self.trainset)))
                     self.loss.append(self.accLoss / self.trainWords)
                     self.trainWords = 0
                     self.accLoss = 0.
@@ -161,6 +161,15 @@ class SkipGram:
         with open(path, 'wb') as f:
             pickle.dump([self.U, self.w2id, self.vocab], f)
 
+    def compute_loss(self, id_word_1, id_word_2):
+        w1 = self.U[id_word_1]
+        w2 = self.U[id_word_2]
+        scalair = w1.dot(w2)
+        similarity = 1 / (1 + np.exp(-scalair))
+        return similarity
+
+    def compute_score(self):
+
     def similarity(self, word1, word2):
         """
             computes similiarity between the two words. unknown words are mapped to one common vector
@@ -186,8 +195,10 @@ class SkipGram:
             w1 = self.U[id_word_1]
             w2 = self.U[id_word_2]
 
-        scalair = w1.dot(w2)
-        similarity = 1 / (1 + np.exp(-scalair))
+        # scalair = w1.dot(w2)/np.linalg.norm(w1,w2)
+        similarity = w1.dot(w2) / (np.linalg.norm(w1)*np.linalg.norm(w2))
+
+        # similarity = 1 / (1 + np.exp(-scalair))
         # similarity = scalair / (np.linalg.norm(w1) * np.linalg.norm(w2))
         return similarity
 
