@@ -45,7 +45,7 @@ def loadPairs(path):
 
 
 class SkipGram:
-    def __init__(self, sentences, nEmbed=10, git=5, winSize=5, minCount=5):
+    def __init__(self, sentences, nEmbed=10, negativeRate=5, winSize=5, minCount=5):
         self.minCount = minCount
         self.winSize = winSize
 
@@ -114,7 +114,7 @@ class SkipGram:
                         self.trainWords += 1
                         self.accLoss += self.compute_loss(wIdx, ctxtId)
                 if counter % 100 == 0:
-                    #print(' > training %d of %d' % (counter, len(self.trainset)))
+                    # print(' > training %d of %d' % (counter, len(self.trainset)))
                     self.loss.append(self.accLoss / self.trainWords)
                     self.trainWords = 0
                     self.accLoss = 0.
@@ -169,6 +169,16 @@ class SkipGram:
         return similarity
 
     def compute_score(self):
+        true = pd.read_csv('simlex.csv', delimiter='\t')
+        pairs = loadPairs('simlex.csv')
+        similarity_prediction = []
+        for a, b, _ in pairs:
+            # make sure this does not raise any exception, even if a or b are not in sg.vocab
+            similarity_prediction.append((self.similarity(a, b)))
+        similarity_prediction = pd.DataFrame(np.array(similarity_prediction), columns=['prediction'])
+        merged_df = pd.concat([similarity_prediction, true], axis=1)
+        merged_df = merged_df[merged_df['prediction'] < 1]
+        return merged_df[['prediction', 'similarity']].corr().similarity[0]
 
     def similarity(self, word1, word2):
         """
@@ -196,7 +206,7 @@ class SkipGram:
             w2 = self.U[id_word_2]
 
         # scalair = w1.dot(w2)/np.linalg.norm(w1,w2)
-        similarity = w1.dot(w2) / (np.linalg.norm(w1)*np.linalg.norm(w2))
+        similarity = w1.dot(w2) / (np.linalg.norm(w1) * np.linalg.norm(w2))
 
         # similarity = 1 / (1 + np.exp(-scalair))
         # similarity = scalair / (np.linalg.norm(w1) * np.linalg.norm(w2))
