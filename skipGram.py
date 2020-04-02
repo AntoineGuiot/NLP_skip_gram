@@ -16,10 +16,9 @@ from spacy.lang.en import English
 nlp = English()
 
 
-# pour ajouter un mot en stop word nlp.vocab[word].is_stop = True
+# to add a word as stop word nlp.vocab[word].is_stop = True
 
 def text2sentences(path):
-    # feel free to make a better tokenization/pre-processing
     sentences = []
     with open(path) as f:
         for l in f:
@@ -29,10 +28,8 @@ def text2sentences(path):
             sentences.append(re.sub('[^a-zA-Z]', ' ', l).lower().split())
     # removing stopwords and punctuation
     for sentence in sentences:
-
         for word in sentence:
             lexeme = nlp.vocab[word]
-
             if lexeme.is_stop == True:
                 sentence.remove(word)
     return sentences
@@ -45,27 +42,28 @@ def loadPairs(path):
 
 
 class SkipGram:
-    def __init__(self, sentences, nEmbed=10, negativeRate=5, winSize=5, minCount=5):
+    def __init__(self, sentences=None, nEmbed=10, negativeRate=5, winSize=5, minCount=5):
         self.minCount = minCount
         self.winSize = winSize
 
-        # dictionnary containing the nb of occurrence of each word
+        if sentences!=None:
 
-        sentences_concat = np.concatenate(sentences)
-        unique, frequency = np.unique(sentences_concat, return_counts=True)
-        self.occ = dict(zip(unique, frequency))
-        self.vocab = {k: v for k, v in self.occ.items() if v > self.minCount}
-        self.w2id = dict(zip(self.vocab.keys(), np.arange(0, len(self.vocab))))
+            # dictionnary containing the nb of occurrence of each word
+            sentences_concat = np.concatenate(sentences)
+            unique, frequency = np.unique(sentences_concat, return_counts=True)
+            self.occ = dict(zip(unique, frequency))
+            self.vocab = {k: v for k, v in self.occ.items() if v > self.minCount}
+            self.w2id = dict(zip(self.vocab.keys(), np.arange(0, len(self.vocab))))
 
-        self.trainset = sentences  # set of sentences
-        self.negativeRate = negativeRate
-        self.nEmbed = nEmbed
+            self.trainset = sentences  # set of sentences
+            self.negativeRate = negativeRate
+            self.nEmbed = nEmbed
 
-        id = self.w2id.values()
-        vect = np.random.random((self.nEmbed, len(self.w2id)))
+            id = self.w2id.values()
+            vect = np.random.random((self.nEmbed, len(self.w2id)))
 
-        self.U = dict(zip(id, vect.T))
-        self.V = dict(zip(id, vect.T))
+            self.U = dict(zip(id, vect.T))
+            self.V = dict(zip(id, vect.T))
         # self.U = np.random.random((self.nEmbed, len(self.w2id)))
         # self.V = np.random.random((self.nEmbed, len(self.w2id)))
         self.loss = []
@@ -73,19 +71,15 @@ class SkipGram:
         self.accLoss = 0.
         self.q = {}
         s = 0
-        for w in self.w2id.keys():
-            f = self.occ[w] ** (3 / 4)
-            s += f
-            self.q[self.w2id[w]] = f
-        self.q = {k: v / s for k, v in self.q.items()}  # dictionary with keys = ids and values = prob q
-
+        if sentences!=None:
+            for w in self.w2id.keys():
+                f = self.occ[w] ** (3 / 4)
+                s += f
+                self.q[self.w2id[w]] = f
+            self.q = {k: v / s for k, v in self.q.items()}  # dictionary with keys = ids and values = prob q
     def sample(self, omit):
         """samples negative words, ommitting those in set omit"""
         w2id_list = list(self.w2id.values())
-        # [w2id_list.remove(omit_word_id) for omit_word_id in omit]
-        # q_list = []
-        # for i in w2id_list:
-        #	q_list.append(self.q[i])
         q_list = list(self.q.values())
         negativeIds = np.random.choice(w2id_list, size=self.negativeRate, p=q_list)
         for i in range(len(negativeIds)):
@@ -94,7 +88,7 @@ class SkipGram:
                     negativeIds[i] = np.random.choice(w2id_list, p=q_list)
         return negativeIds
 
-    def train(self, nb_epochs):
+    def train(self, nb_epochs=10):
         eta = 0.25
         for epoch in range(nb_epochs):
             eta = 0.9 * eta
@@ -120,10 +114,6 @@ class SkipGram:
                     self.accLoss = 0.
 
     def trainWord(self, wordId, contextId, negativeIds, eta):
-        # we want to maximize the log likelihood l = sum[sigma(gamma(i,j)*u_i*v_j)]
-        # U = self.U
-        # V = self.V
-
         # compute gradients of l
         U1 = self.U[wordId]
         V2 = self.V[contextId]
@@ -155,7 +145,6 @@ class SkipGram:
             self.U[wordId] = U1
             self.V[negativeId] = V2
 
-        # update self.U and self.V
 
     def save(self, path):
         with open(path, 'wb') as f:
@@ -207,7 +196,6 @@ class SkipGram:
 
         # scalair = w1.dot(w2)/np.linalg.norm(w1,w2)
         similarity = w1.dot(w2) / (np.linalg.norm(w1) * np.linalg.norm(w2))
-
         # similarity = 1 / (1 + np.exp(-scalair))
         # similarity = scalair / (np.linalg.norm(w1) * np.linalg.norm(w2))
         return similarity
@@ -216,7 +204,7 @@ class SkipGram:
     def load(path):
         with open(path, 'rb') as f:
             U_l, w2id_l, vocab_l = pickle.load(f)
-            sg = SkipGram([])
+            sg = SkipGram()
             sg.U = U_l
             sg.w2id = w2id_l
             sg.vocab = vocab_l
